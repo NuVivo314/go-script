@@ -39,7 +39,7 @@ func NewFilesTimingRecoding(fileprefix string, stdin io.Reader, stdout io.Writer
 		log.Println("No ok cast...")
 	}
 
-	if out, ok := in.(TickInfo); ok {
+	if out, ok := out.(TickInfo); ok {
 		if fail := makeTicker(fileprefix+".out", out); fail != nil {
 			log.Println(fail)
 		}
@@ -47,7 +47,7 @@ func NewFilesTimingRecoding(fileprefix string, stdin io.Reader, stdout io.Writer
 		log.Println("No ok cast...")
 	}
 
-	if err, ok := in.(TickInfo); ok {
+	if err, ok := err.(TickInfo); ok {
 		if fail := makeTicker(fileprefix+".err", err); fail != nil {
 			log.Println(fail)
 		}
@@ -62,15 +62,16 @@ func makeTicker(fileprefix string, ticker TickInfo) (err error) {
 	var fd *os.File
 	fd, err = os.Create(fileprefix + ".time")
 	if err != nil {
+		log.Println(err)
 		return
 	}
 
 	go func() {
 		c := ticker.Ticker()
-		log.Print("time record")
 		for {
 			p, ok := <-c
 			if !ok {
+				log.Panic("ko")
 				break
 			}
 			fmt.Fprintln(fd, p)

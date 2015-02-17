@@ -3,6 +3,7 @@ package script
 import (
 	"io"
 	"log"
+	"os"
 	"time"
 )
 
@@ -12,13 +13,13 @@ type TickInfo interface {
 
 type read struct {
 	r       io.Reader
-	w       io.Writer
+	w       *os.File
 	t       time.Time
 	ticking bool
 	tick    chan *Tick
 }
 
-func NewReader(r io.Reader, w io.Writer) io.Reader {
+func NewReader(r io.Reader, w *os.File) io.Reader {
 	return &read{r, w, time.Now(), false, nil}
 }
 
@@ -29,14 +30,13 @@ func (tee *read) Read(p []byte) (n int, err error) {
 		if n, err := tee.w.Write(p[:n]); err != nil {
 			return n, err
 		}
+		tee.w.Sync()
 	}
 	return
 }
 
 func (tee *read) Close() error {
-	if cout, ok := tee.w.(io.Closer); ok {
-		cout.Close()
-	}
+	tee.w.Close()
 	if tee.tick != nil {
 		close(tee.tick)
 	}
@@ -45,7 +45,7 @@ func (tee *read) Close() error {
 
 func (tee *read) Ticker() chan *Tick {
 	if tee.tick == nil {
-		tee.tick = make(chan *Tick, 1)
+		tee.tick = make(chan *Tick, 5)
 	}
 
 	tee.ticking = true
@@ -66,32 +66,31 @@ func (tee *read) update(n int) {
 // &&&
 type write struct {
 	in      io.Writer
-	out     io.Writer
+	out     *os.File
 	t       time.Time
 	ticking bool
 	tick    chan *Tick
 }
 
-func NewWriter(in io.Writer, out io.Writer) io.WriteCloser {
+func NewWriter(in io.Writer, out *os.File) io.WriteCloser {
 	return &write{in, out, time.Now(), false, nil}
 }
 
 func (pipe *write) Write(data []byte) (n int, err error) {
 	n, err = pipe.in.Write(data)
+	pipe.update(n)
 	if pipe.out != nil {
 		if _, err = pipe.out.Write(data[:n]); err != nil {
 			log.Println(err)
 			pipe.out = nil
 		}
+		pipe.out.Sync()
 	}
-	pipe.update(n)
 	return
 }
 
 func (pipe *write) Close() error {
-	if cout, ok := pipe.out.(io.Closer); ok {
-		cout.Close()
-	}
+	pipe.out.Close()
 	if cout, ok := pipe.in.(io.Closer); ok {
 		cout.Close()
 	}
@@ -104,7 +103,7 @@ func (pipe *write) Close() error {
 
 func (pipe *write) Ticker() chan *Tick {
 	if pipe.tick == nil {
-		pipe.tick = make(chan *Tick, 1)
+		pipe.tick = make(chan *Tick, 5)
 	}
 
 	pipe.ticking = true
